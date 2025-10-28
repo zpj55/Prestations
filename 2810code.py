@@ -696,114 +696,114 @@ with tabs[2]:
                                        data=df_trip.sort_values(["NUM_ADH","PRENOM","DATE_B"]).to_csv(index=False).encode("utf-8"),
                                        file_name="motif_A_B_A_triplets.csv", mime="text/csv")
 
-# ---------- Test 5 : Prestations payées APRÈS date de radiation ----------
-st.header("Test 5 - Prestations payées après date de radiation (P_AS & P_TI, hors REGUL)")
-
-# Nécessaire : mapping Radiés OK + colonnes clés
-if not (st.session_state.rad_mapped and st.session_state.rad_path and st.session_state.rad_map.get("NUM_ADH") and st.session_state.rad_map.get("DATE_RADIATION")):
-    st.info("Mappez d’abord le fichier **Radiés** (NUM_ADH & DATE_RADIATION) dans l’onglet 2 pour activer ce test.")
-else:
-    # Source Radiés
-# --- Source Radiés robuste (xlsx/csv + fallback si plugin excel absent) ---
-    rad_path = st.session_state.rad_path
-    rad_ext  = st.session_state.rad_ext
-    col_num  = st.session_state.rad_map["NUM_ADH"]
-    col_date = st.session_state.rad_map["DATE_RADIATION"]
-
-    if rad_ext == ".csv":
-        rad_src = csv_src(rad_path)
-    elif HAS_EXCEL:
-        rad_src = excel_src(rad_path)
-    else:
-        # Fallback : on lit l'Excel avec Polars si plugin Excel absent
-        needed_cols = [col_num, col_date]
-        df_r = pl.read_excel(rad_path, columns=needed_cols)
-        rename_map = {col_num: "NUM_ADH_SRC", col_date: "DATE_RADIATION_SRC"}
-        df_r = df_r.rename(rename_map)
-        con.register("Rad_df", df_r.to_pandas())
-        rad_src = "Rad_df"
-        col_num = "NUM_ADH_SRC"
-        col_date = "DATE_RADIATION_SRC"
-
-
-    sql_post_rad = BASE_SQL + f"""
-    -- R0 : normalisation Radiés (date via texte ou numéro Excel)
-    , R0 AS (
-    SELECT
-        CAST("{col_num}" AS VARCHAR) AS NUM_ADH,
-        COALESCE(
-        TRY_CAST("{col_date}" AS TIMESTAMP),
-        DATE '1899-12-30' + CAST(TRY_CAST("{col_date}" AS DOUBLE) AS INTEGER)  -- Excel serial -> date
-        ) AS DATE_RADIATION
-    FROM {rad_src}
-    WHERE "{col_num}" IS NOT NULL
-    )
-    -- R : 1 ligne par adhérent (première radiation connue)
-    , R AS (
-    SELECT NUM_ADH, MIN(DATE_RADIATION) AS DATE_RAD
-    FROM R0
-    WHERE DATE_RADIATION IS NOT NULL
-    GROUP BY 1
-    )
-    -- P : prestations filtrées (hors REGUL)
-    , P AS (
-    SELECT
-        CAST("NUM_ADH" AS VARCHAR) AS NUM_ADH,
-        CAST("NOM" AS VARCHAR) AS NOM,
-        CAST("PRENOM" AS VARCHAR) AS PRENOM,
-        CAST("REGLRC_REG_RC" AS VARCHAR) AS TYPE_PAIEMENT,
-        CAST("WM_ACTE_RC" AS VARCHAR) AS ACTE,
-        TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP) AS DATE_SOINS,
-        CAST("NUM_DEC" AS VARCHAR) AS NUM_DEC,
-        TRY_CAST("WM_MONT_REMB" AS DOUBLE) AS MONTANT_NET
-    FROM Prest
-    WHERE COALESCE("WM_ACTE_RC",'') <> 'REGUL'
-        AND "REGLRC_REG_RC" IN ('P_AS','P_TI')
-    )
-    SELECT
-    P.NUM_ADH, P.NOM, P.PRENOM,
-    P.TYPE_PAIEMENT, P.ACTE,
-    P.DATE_SOINS, R.DATE_RAD,
-    P.NUM_DEC, P.MONTANT_NET
-    FROM P
-    JOIN R ON P.NUM_ADH = R.NUM_ADH
-    WHERE P.DATE_SOINS > R.DATE_RAD
-    ORDER BY P.NUM_ADH, P.DATE_SOINS, P.NUM_DEC
-    LIMIT {limit_rows}
-    """
-
-
-    df_post_rad = con.execute(sql_post_rad).df()
-
-    n_lignes = len(df_post_rad)
-    n_adh = df_post_rad["NUM_ADH"].nunique() if n_lignes else 0
-    total_net = pd.to_numeric(df_post_rad.get("MONTANT_NET", pd.Series([], dtype=float)), errors="coerce").fillna(0).sum()
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Lignes concernées", f"{n_lignes:,}".replace(",", " "))
-    c2.metric("Adhérents uniques", f"{n_adh:,}".replace(",", " "))
-    c3.metric("Total net €", format_euro(total_net))
-
-    if df_post_rad.empty:
-        st.success("Aucune prestation après la date de radiation.")
-    else:
-        # Affichage propre
-        view = df_post_rad.rename(columns={
-            "TYPE_PAIEMENT": "Type (P_AS/P_TI)",
-            "ACTE": "Acte",
-            "DATE_SOINS": "Date de soins",
-            "DATE_RAD": "Date de radiation",
-            "NUM_DEC": "N° décompte",
-            "MONTANT_NET": "Montant net (€)"
-        })
-        st.dataframe(view, use_container_width=True, height=380)
-
-        st.download_button(
-            "Télécharger (CSV) — Prestations après radiation",
-            data=df_post_rad.to_csv(index=False).encode("utf-8"),
-            file_name="prestations_apres_radiation.csv",
-            mime="text/csv"
-        )
+            # ---------- Test 5 : Prestations payées APRÈS date de radiation ----------
+            st.header("Test 5 - Prestations payées après date de radiation (P_AS & P_TI, hors REGUL)")
+            
+            # Nécessaire : mapping Radiés OK + colonnes clés
+            if not (st.session_state.rad_mapped and st.session_state.rad_path and st.session_state.rad_map.get("NUM_ADH") and st.session_state.rad_map.get("DATE_RADIATION")):
+                st.info("Mappez d’abord le fichier **Radiés** (NUM_ADH & DATE_RADIATION) dans l’onglet 2 pour activer ce test.")
+            else:
+                # Source Radiés
+            # --- Source Radiés robuste (xlsx/csv + fallback si plugin excel absent) ---
+                rad_path = st.session_state.rad_path
+                rad_ext  = st.session_state.rad_ext
+                col_num  = st.session_state.rad_map["NUM_ADH"]
+                col_date = st.session_state.rad_map["DATE_RADIATION"]
+            
+                if rad_ext == ".csv":
+                    rad_src = csv_src(rad_path)
+                elif HAS_EXCEL:
+                    rad_src = excel_src(rad_path)
+                else:
+                    # Fallback : on lit l'Excel avec Polars si plugin Excel absent
+                    needed_cols = [col_num, col_date]
+                    df_r = pl.read_excel(rad_path, columns=needed_cols)
+                    rename_map = {col_num: "NUM_ADH_SRC", col_date: "DATE_RADIATION_SRC"}
+                    df_r = df_r.rename(rename_map)
+                    con.register("Rad_df", df_r.to_pandas())
+                    rad_src = "Rad_df"
+                    col_num = "NUM_ADH_SRC"
+                    col_date = "DATE_RADIATION_SRC"
+            
+            
+                sql_post_rad = BASE_SQL + f"""
+                -- R0 : normalisation Radiés (date via texte ou numéro Excel)
+                , R0 AS (
+                SELECT
+                    CAST("{col_num}" AS VARCHAR) AS NUM_ADH,
+                    COALESCE(
+                    TRY_CAST("{col_date}" AS TIMESTAMP),
+                    DATE '1899-12-30' + CAST(TRY_CAST("{col_date}" AS DOUBLE) AS INTEGER)  -- Excel serial -> date
+                    ) AS DATE_RADIATION
+                FROM {rad_src}
+                WHERE "{col_num}" IS NOT NULL
+                )
+                -- R : 1 ligne par adhérent (première radiation connue)
+                , R AS (
+                SELECT NUM_ADH, MIN(DATE_RADIATION) AS DATE_RAD
+                FROM R0
+                WHERE DATE_RADIATION IS NOT NULL
+                GROUP BY 1
+                )
+                -- P : prestations filtrées (hors REGUL)
+                , P AS (
+                SELECT
+                    CAST("NUM_ADH" AS VARCHAR) AS NUM_ADH,
+                    CAST("NOM" AS VARCHAR) AS NOM,
+                    CAST("PRENOM" AS VARCHAR) AS PRENOM,
+                    CAST("REGLRC_REG_RC" AS VARCHAR) AS TYPE_PAIEMENT,
+                    CAST("WM_ACTE_RC" AS VARCHAR) AS ACTE,
+                    TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP) AS DATE_SOINS,
+                    CAST("NUM_DEC" AS VARCHAR) AS NUM_DEC,
+                    TRY_CAST("WM_MONT_REMB" AS DOUBLE) AS MONTANT_NET
+                FROM Prest
+                WHERE COALESCE("WM_ACTE_RC",'') <> 'REGUL'
+                    AND "REGLRC_REG_RC" IN ('P_AS','P_TI')
+                )
+                SELECT
+                P.NUM_ADH, P.NOM, P.PRENOM,
+                P.TYPE_PAIEMENT, P.ACTE,
+                P.DATE_SOINS, R.DATE_RAD,
+                P.NUM_DEC, P.MONTANT_NET
+                FROM P
+                JOIN R ON P.NUM_ADH = R.NUM_ADH
+                WHERE P.DATE_SOINS > R.DATE_RAD
+                ORDER BY P.NUM_ADH, P.DATE_SOINS, P.NUM_DEC
+                LIMIT {limit_rows}
+                """
+            
+            
+                df_post_rad = con.execute(sql_post_rad).df()
+            
+                n_lignes = len(df_post_rad)
+                n_adh = df_post_rad["NUM_ADH"].nunique() if n_lignes else 0
+                total_net = pd.to_numeric(df_post_rad.get("MONTANT_NET", pd.Series([], dtype=float)), errors="coerce").fillna(0).sum()
+            
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Lignes concernées", f"{n_lignes:,}".replace(",", " "))
+                c2.metric("Adhérents uniques", f"{n_adh:,}".replace(",", " "))
+                c3.metric("Total net €", format_euro(total_net))
+            
+                if df_post_rad.empty:
+                    st.success("Aucune prestation après la date de radiation.")
+                else:
+                    # Affichage propre
+                    view = df_post_rad.rename(columns={
+                        "TYPE_PAIEMENT": "Type (P_AS/P_TI)",
+                        "ACTE": "Acte",
+                        "DATE_SOINS": "Date de soins",
+                        "DATE_RAD": "Date de radiation",
+                        "NUM_DEC": "N° décompte",
+                        "MONTANT_NET": "Montant net (€)"
+                    })
+                    st.dataframe(view, use_container_width=True, height=380)
+            
+                    st.download_button(
+                        "Télécharger (CSV) — Prestations après radiation",
+                        data=df_post_rad.to_csv(index=False).encode("utf-8"),
+                        file_name="prestations_apres_radiation.csv",
+                        mime="text/csv"
+                    )
 
 
 # =============================================

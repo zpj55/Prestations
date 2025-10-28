@@ -808,23 +808,39 @@ with tabs[2]:
                 st.divider()
                 st.header("Courbe mensuelle — année en cours (Total net)")
     
-                # Année en cours côté serveur
                 current_year = int(pd.Timestamp.today().year)
+    
+                # Expressions robustes pour date et montant (FR -> US)
+                date_expr = """
+                COALESCE(
+                  TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP),
+                  DATE '1899-12-30' + CAST(TRY_CAST("RO_DATE_SOINS_DEB" AS DOUBLE) AS INTEGER)
+                )
+                """
+    
+                amount_expr = """
+                TRY_CAST(
+                  REPLACE(
+                    REPLACE(CAST("WM_MONT_REMB" AS VARCHAR), ' ', ''),  -- supprime espaces (y compris insécables)
+                    ',', '.'                                           -- remplace virgule décimale
+                  ) AS DOUBLE
+                )
+                """
     
                 sql_curvey = BASE_SQL + f"""
                 SELECT
-                    DATE_TRUNC('month', TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP)) AS mois,
-                    SUM(TRY_CAST("WM_MONT_REMB" AS DOUBLE)) AS montant
+                  DATE_TRUNC('month', {date_expr}) AS mois,
+                  SUM({amount_expr}) AS montant
                 FROM Prest
                 WHERE COALESCE("WM_ACTE_RC",'') <> 'REGUL'
                   AND "REGLRC_REG_RC" IN ('P_AS','P_TI')
-                  AND EXTRACT(YEAR FROM TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP)) = {current_year}
+                  AND EXTRACT(YEAR FROM {date_expr}) = {current_year}
                 GROUP BY 1
                 ORDER BY 1
                 """
                 df_line = con.execute(sql_curvey).df()
     
-                # Assure les 12 mois (même si certains sont vides)
+                # Assurer tous les mois de l'année, même vides
                 idx = pd.date_range(f"{current_year}-01-01", f"{current_year}-12-01", freq="MS")
                 if not df_line.empty:
                     df_line["mois"] = pd.to_datetime(df_line["mois"]).dt.to_period("M").dt.to_timestamp()
@@ -833,7 +849,6 @@ with tabs[2]:
                 df_line = pd.DataFrame({"mois": idx}).merge(df_line, on="mois", how="left")
                 df_line["montant"] = pd.to_numeric(df_line["montant"], errors="coerce").fillna(0)
     
-                # Courbe simple et lisible
                 fig_curvey = px.line(df_line, x="mois", y="montant", labels={"mois": "Mois", "montant": "Montant net (€)"})
                 fig_curvey.update_traces(mode="lines+markers")
                 fig_curvey.update_layout(
@@ -850,6 +865,7 @@ with tabs[2]:
                     file_name=f"courbe_prestations_{current_year}.csv",
                     mime="text/csv"
                 )
+
 
 
 # =============================================

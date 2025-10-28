@@ -815,3 +815,16 @@ st.markdown("""
 .stExpander {border: 1px solid #e5e7eb; border-radius: 12px; background: #fafafa;}
 </style>
 """, unsafe_allow_html=True)
+
+st.markdown("""
+<style>
+/* Masquer le ruban Streamlit Cloud + header */
+div[data-testid="stDecoration"] { display: none !important; }
+div[data-testid="stHeader"] { height: 0px !important; visibility: hidden !important; }
+#MainMenu, header, footer { visibility: hidden !important; }
+
+/* Remonter le contenu au plus haut */
+.block-container { padding-top: 0.2rem !important; }
+</style>
+""", unsafe_allow_html=True)
+

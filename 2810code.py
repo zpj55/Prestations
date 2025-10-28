@@ -151,7 +151,7 @@ def make_base_sql(path: str, ext: str, mapping: dict, val_abs_src: str) -> str:
 # UI HEADER
 # =============================================
 st.title("MUTELIS Analyses Prestations vTest JP — 2 fichiers")
-st.caption("Upload + mapping persistant. Tests : P_AS / P_TI / Mix, Tops, >3 RIB, motif A→B→A. — Pas de reset au 2ᵉ upload.")
+st.caption("Analyse automatisée des prestations et radiations : détection des incohérences, doublons et schémas suspects à partir des fichiers fournis. Les résultats permettent d’identifier les anomalies de remboursement, les adhérents à risque et les tiers présentant des comportements atypiques.")
 
 tabs = st.tabs(["1) Prestations", "2) Radiés", "3) Analyses & Graphs"])
 

@@ -214,7 +214,13 @@ with tabs[0]:
                                 default_index = 1 + headers.index(defaults[col])
                             else:
                                 default_index = idx(headers, col)
-                            mapping[col] = st.selectbox(f"{col} ⇢", [""] + headers, index=default_index, key=f"map_pre_{col}")
+                            token = st.session_state.get("prest_token", 0)
+                            mapping[col] = st.selectbox(
+                                    f"{col} ⇢",
+                                    [""] + headers,
+                                    index=default_index,
+                                    key=f"map_pre_{col}_{token}",
+                                )    
                     with col2:
                         # Par défaut : WM_MONT_REMB si présent
                         val_abs_default = defaults.get("VAL_ABS_SRC") or ("WM_MONT_REMB" if "WM_MONT_REMB" in headers else headers[0])

@@ -210,37 +210,64 @@ with tabs[0]:
                 defaults = st.session_state.prest_map or {}
                 with st.form("map_form_prest"):
                     col1, col2 = st.columns([3, 2])
+                
+                    token = st.session_state.get("prest_token", 0)
+                    defaults = st.session_state.prest_map or {}
+                
+                    # --------- Widgets mapping (gauche) ----------
                     with col1:
-                        mapping = {}
                         for col in EXPECTED:
                             default_index = 0
                             if defaults.get(col) and defaults[col] in headers:
                                 default_index = 1 + headers.index(defaults[col])
                             else:
                                 default_index = idx(headers, col)
-                            token = st.session_state.get("prest_token", 0)
-                            mapping[col] = st.selectbox(
-                                    f"{col} ⇢",
-                                    [""] + headers,
-                                    index=default_index,
-                                    key=f"map_pre_{col}_{token}",
-                                )    
+                
+                            st.selectbox(
+                                f"{col} ⇢",
+                                [""] + headers,
+                                index=default_index,
+                                key=f"map_pre_{col}_{token}",
+                            )
+                
+                    # --------- Options (droite) ----------
                     with col2:
-                        # Par défaut : WM_MONT_REMB si présent
-                        val_abs_default = defaults.get("VAL_ABS_SRC") or ("WM_MONT_REMB" if "WM_MONT_REMB" in headers else headers[0])
-                        val_abs_src = st.selectbox("Colonne pour VAL_ABS (ABS)", headers,
-                                                   index=(headers.index(val_abs_default) if val_abs_default in headers else 0),
-                                                   key="prest_valabs_src")
-                        limit_rows = st.number_input("Limite lignes affichées", min_value=200, max_value=100_000,
-                                                     value=st.session_state.prest_limit, step=500, key="prest_limit_in")
-
+                        val_abs_default = defaults.get("VAL_ABS_SRC") or (
+                            "WM_MONT_REMB" if "WM_MONT_REMB" in headers else headers[0]
+                        )
+                
+                        st.selectbox(
+                            "Colonne pour VAL_ABS (ABS)",
+                            headers,
+                            index=(headers.index(val_abs_default) if val_abs_default in headers else 0),
+                            key=f"prest_valabs_src_{token}",
+                        )
+                
+                        st.number_input(
+                            "Limite lignes affichées",
+                            min_value=200,
+                            max_value=100_000,
+                            value=st.session_state.prest_limit,
+                            step=500,
+                            key=f"prest_limit_in_{token}",
+                        )
+                
                     submitted = st.form_submit_button("✅ Valider mapping Prestations")
+                
                     if submitted:
+                        # Reconstruire depuis session_state (clé du fix)
+                        mapping = {col: st.session_state.get(f"map_pre_{col}_{token}", "") for col in EXPECTED}
+                        val_abs_src = st.session_state.get(f"prest_valabs_src_{token}", None)
+                        limit_rows = st.session_state.get(f"prest_limit_in_{token}", st.session_state.prest_limit)
+                
                         required = ["NUM_ADH","NOM","PRENOM","COMP_GARA_CODE","WM_ACTE_RC",
                                     "RO_DATE_SOINS_DEB","NUM_DEC","REGLRC_REG_RC","WM_MONT_REMB"]
                         missing = [r for r in required if not mapping.get(r)]
+                
                         if missing:
                             st.error("Colonnes obligatoires manquantes : " + ", ".join(missing))
+                            # debug utile
+                            st.write({k: mapping.get(k) for k in required})
                         else:
                             with st.spinner("Préparation Prestations…"):
                                 st.session_state.prest_map = mapping

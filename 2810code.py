@@ -185,6 +185,10 @@ with tabs[0]:
 
         headers = st.session_state.prest_headers
 
+        st.caption(f"{len(headers)} colonnes détectées par le reader")
+        st.write(headers)
+
+
         EXPECTED = [
             "NUM_ADH", "NOM", "PRENOM", "COMP_GARA_CODE", "WM_ACTE_RC",
             "RO_DATE_SOINS_DEB", "NUM_DEC", "REGLRC_REG_RC", "WM_MONT_REMB",

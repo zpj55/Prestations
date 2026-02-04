@@ -36,19 +36,14 @@ def save_file(_data: bytes, name: str) -> str:
 @st.cache_data
 def get_headers(path: str, extension: str, has_excel: bool):
     safe = path.replace("'", "''")
-
     if extension == ".csv":
-        q = f"SELECT * FROM read_csv_auto('{safe}', header=1, all_varchar=1, parallel=true) LIMIT 0"
-        return list(con.execute(q).df().columns)
-
+        q = f"DESCRIBE SELECT * FROM read_csv_auto('{safe}', header=1, all_varchar=1)"
+        return [r[0] for r in con.execute(q).fetchall()]
     if has_excel:
-        q = f"SELECT * FROM read_excel('{safe}') LIMIT 0"
-        return list(con.execute(q).df().columns)
-
-    # fallback polars
+        q = f"DESCRIBE SELECT * FROM read_excel('{safe}')"
+        return [r[0] for r in con.execute(q).fetchall()]
     df0 = pl.read_excel(path, read_options={"n_rows": 0})
     return df0.columns
-
 
 def idx(hdrs, name):
     try:
@@ -169,10 +164,8 @@ with tabs[0]:
     if up:
         st.session_state.prest_path = save_file(up.getvalue(), up.name)
         st.session_state.prest_ext = os.path.splitext(st.session_state.prest_path)[1].lower()
-        st.session_state.prest_mapped = False
-    
-        st.session_state.prest_token = st.session_state.get("prest_token", 0) + 1
-
+        # NE PAS toucher à rad_* ici.
+        st.session_state.prest_mapped = False  # on revalide seulement ce fichier
 
     if st.session_state.prest_path:
         # entêtes
@@ -184,10 +177,6 @@ with tabs[0]:
             st.session_state.prest_headers = []
 
         headers = st.session_state.prest_headers
-
-        st.caption(f"{len(headers)} colonnes détectées par le reader")
-        st.write(headers)
-
 
         EXPECTED = [
             "NUM_ADH", "NOM", "PRENOM", "COMP_GARA_CODE", "WM_ACTE_RC",
@@ -210,64 +199,31 @@ with tabs[0]:
                 defaults = st.session_state.prest_map or {}
                 with st.form("map_form_prest"):
                     col1, col2 = st.columns([3, 2])
-                
-                    token = st.session_state.get("prest_token", 0)
-                    defaults = st.session_state.prest_map or {}
-                
-                    # --------- Widgets mapping (gauche) ----------
                     with col1:
+                        mapping = {}
                         for col in EXPECTED:
                             default_index = 0
                             if defaults.get(col) and defaults[col] in headers:
                                 default_index = 1 + headers.index(defaults[col])
                             else:
                                 default_index = idx(headers, col)
-                
-                            st.selectbox(
-                                f"{col} ⇢",
-                                [""] + headers,
-                                index=default_index,
-                                key=f"map_pre_{col}_{token}",
-                            )
-                
-                    # --------- Options (droite) ----------
+                            mapping[col] = st.selectbox(f"{col} ⇢", [""] + headers, index=default_index, key=f"map_pre_{col}")
                     with col2:
-                        val_abs_default = defaults.get("VAL_ABS_SRC") or (
-                            "WM_MONT_REMB" if "WM_MONT_REMB" in headers else headers[0]
-                        )
-                
-                        st.selectbox(
-                            "Colonne pour VAL_ABS (ABS)",
-                            headers,
-                            index=(headers.index(val_abs_default) if val_abs_default in headers else 0),
-                            key=f"prest_valabs_src_{token}",
-                        )
-                
-                        st.number_input(
-                            "Limite lignes affichées",
-                            min_value=200,
-                            max_value=100_000,
-                            value=st.session_state.prest_limit,
-                            step=500,
-                            key=f"prest_limit_in_{token}",
-                        )
-                
+                        # Par défaut : WM_MONT_REMB si présent
+                        val_abs_default = defaults.get("VAL_ABS_SRC") or ("WM_MONT_REMB" if "WM_MONT_REMB" in headers else headers[0])
+                        val_abs_src = st.selectbox("Colonne pour VAL_ABS (ABS)", headers,
+                                                   index=(headers.index(val_abs_default) if val_abs_default in headers else 0),
+                                                   key="prest_valabs_src")
+                        limit_rows = st.number_input("Limite lignes affichées", min_value=200, max_value=100_000,
+                                                     value=st.session_state.prest_limit, step=500, key="prest_limit_in")
+
                     submitted = st.form_submit_button("✅ Valider mapping Prestations")
-                
                     if submitted:
-                        # Reconstruire depuis session_state (clé du fix)
-                        mapping = {col: st.session_state.get(f"map_pre_{col}_{token}", "") for col in EXPECTED}
-                        val_abs_src = st.session_state.get(f"prest_valabs_src_{token}", None)
-                        limit_rows = st.session_state.get(f"prest_limit_in_{token}", st.session_state.prest_limit)
-                
                         required = ["NUM_ADH","NOM","PRENOM","COMP_GARA_CODE","WM_ACTE_RC",
                                     "RO_DATE_SOINS_DEB","NUM_DEC","REGLRC_REG_RC","WM_MONT_REMB"]
                         missing = [r for r in required if not mapping.get(r)]
-                
                         if missing:
                             st.error("Colonnes obligatoires manquantes : " + ", ".join(missing))
-                            # debug utile
-                            st.write({k: mapping.get(k) for k in required})
                         else:
                             with st.spinner("Préparation Prestations…"):
                                 st.session_state.prest_map = mapping
@@ -742,7 +698,7 @@ with tabs[2]:
 
             # ---------- Test 5 : Prestations payées APRÈS date de radiation ----------
             st.header("Test 5 - Prestations payées après date de radiation (P_AS & P_TI, hors REGUL)")
-            
+
             # Nécessaire : mapping Radiés OK + colonnes clés
             if not (st.session_state.rad_mapped and st.session_state.rad_path and st.session_state.rad_map.get("NUM_ADH") and st.session_state.rad_map.get("DATE_RADIATION")):
                 st.info("Mappez d’abord le fichier **Radiés** (NUM_ADH & DATE_RADIATION) dans l’onglet 2 pour activer ce test.")
@@ -753,7 +709,7 @@ with tabs[2]:
                 rad_ext  = st.session_state.rad_ext
                 col_num  = st.session_state.rad_map["NUM_ADH"]
                 col_date = st.session_state.rad_map["DATE_RADIATION"]
-            
+
                 if rad_ext == ".csv":
                     rad_src = csv_src(rad_path)
                 elif HAS_EXCEL:
@@ -768,8 +724,8 @@ with tabs[2]:
                     rad_src = "Rad_df"
                     col_num = "NUM_ADH_SRC"
                     col_date = "DATE_RADIATION_SRC"
-            
-            
+
+
                 sql_post_rad = BASE_SQL + f"""
                 -- R0 : normalisation Radiés (date via texte ou numéro Excel)
                 , R0 AS (
@@ -815,19 +771,19 @@ with tabs[2]:
                 ORDER BY P.NUM_ADH, P.DATE_SOINS, P.NUM_DEC
                 LIMIT {limit_rows}
                 """
-            
-            
+
+
                 df_post_rad = con.execute(sql_post_rad).df()
-            
+
                 n_lignes = len(df_post_rad)
                 n_adh = df_post_rad["NUM_ADH"].nunique() if n_lignes else 0
                 total_net = pd.to_numeric(df_post_rad.get("MONTANT_NET", pd.Series([], dtype=float)), errors="coerce").fillna(0).sum()
-            
+
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Lignes concernées", f"{n_lignes:,}".replace(",", " "))
                 c2.metric("Adhérents uniques", f"{n_adh:,}".replace(",", " "))
                 c3.metric("Total net €", format_euro(total_net))
-            
+
                 if df_post_rad.empty:
                     st.success("Aucune prestation après la date de radiation.")
                 else:
@@ -841,13 +797,75 @@ with tabs[2]:
                         "MONTANT_NET": "Montant net (€)"
                     })
                     st.dataframe(view, use_container_width=True, height=380)
-            
+
                     st.download_button(
                         "Télécharger (CSV) — Prestations après radiation",
                         data=df_post_rad.to_csv(index=False).encode("utf-8"),
                         file_name="prestations_apres_radiation.csv",
                         mime="text/csv"
                     )
+
+                st.divider()
+                st.header("Courbe mensuelle — année en cours (Total net)")
+    
+                current_year = int(pd.Timestamp.today().year)
+    
+                # Expressions robustes pour date et montant (FR -> US)
+                date_expr = """
+                COALESCE(
+                  TRY_CAST("RO_DATE_SOINS_DEB" AS TIMESTAMP),
+                  DATE '1899-12-30' + CAST(TRY_CAST("RO_DATE_SOINS_DEB" AS DOUBLE) AS INTEGER)
+                )
+                """
+    
+                amount_expr = """
+                TRY_CAST(
+                  REPLACE(
+                    REPLACE(CAST("WM_MONT_REMB" AS VARCHAR), ' ', ''),  -- supprime espaces (y compris insécables)
+                    ',', '.'                                           -- remplace virgule décimale
+                  ) AS DOUBLE
+                )
+                """
+    
+                sql_curvey = BASE_SQL + f"""
+                SELECT
+                  DATE_TRUNC('month', {date_expr}) AS mois,
+                  SUM({amount_expr}) AS montant
+                FROM Prest
+                WHERE COALESCE("WM_ACTE_RC",'') <> 'REGUL'
+                  AND "REGLRC_REG_RC" IN ('P_AS','P_TI')
+                  AND EXTRACT(YEAR FROM {date_expr}) = {current_year}
+                GROUP BY 1
+                ORDER BY 1
+                """
+                df_line = con.execute(sql_curvey).df()
+    
+                # Assurer tous les mois de l'année, même vides
+                idx = pd.date_range(f"{current_year}-01-01", f"{current_year}-12-01", freq="MS")
+                if not df_line.empty:
+                    df_line["mois"] = pd.to_datetime(df_line["mois"]).dt.to_period("M").dt.to_timestamp()
+                else:
+                    df_line = pd.DataFrame(columns=["mois","montant"])
+                df_line = pd.DataFrame({"mois": idx}).merge(df_line, on="mois", how="left")
+                df_line["montant"] = pd.to_numeric(df_line["montant"], errors="coerce").fillna(0)
+    
+                fig_curvey = px.line(df_line, x="mois", y="montant", labels={"mois": "Mois", "montant": "Montant net (€)"})
+                fig_curvey.update_traces(mode="lines+markers")
+                fig_curvey.update_layout(
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    hovermode="x unified",
+                    xaxis=dict(dtick="M1", tickformat="%b"),
+                    yaxis=dict(tickformat=",")
+                )
+                st.plotly_chart(fig_curvey, use_container_width=True)
+    
+                st.download_button(
+                    f"Télécharger (CSV) — Courbe {current_year}",
+                    data=df_line.to_csv(index=False).encode("utf-8"),
+                    file_name=f"courbe_prestations_{current_year}.csv",
+                    mime="text/csv"
+                )
+
 
 
 # =============================================
@@ -871,4 +889,4 @@ div[data-testid="stHeader"] { height: 0px !important; visibility: hidden !import
 .block-container { padding-top: 0.2rem !important; }
 </style>
 """, unsafe_allow_html=True)
-
+~

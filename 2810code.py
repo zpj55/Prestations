@@ -36,14 +36,19 @@ def save_file(_data: bytes, name: str) -> str:
 @st.cache_data
 def get_headers(path: str, extension: str, has_excel: bool):
     safe = path.replace("'", "''")
+
     if extension == ".csv":
-        q = f"DESCRIBE SELECT * FROM read_csv_auto('{safe}', header=1, all_varchar=1)"
-        return [r[0] for r in con.execute(q).fetchall()]
+        q = f"SELECT * FROM read_csv_auto('{safe}', header=1, all_varchar=1, parallel=true) LIMIT 0"
+        return list(con.execute(q).df().columns)
+
     if has_excel:
-        q = f"DESCRIBE SELECT * FROM read_excel('{safe}')"
-        return [r[0] for r in con.execute(q).fetchall()]
+        q = f"SELECT * FROM read_excel('{safe}') LIMIT 0"
+        return list(con.execute(q).df().columns)
+
+    # fallback polars
     df0 = pl.read_excel(path, read_options={"n_rows": 0})
     return df0.columns
+
 
 def idx(hdrs, name):
     try:

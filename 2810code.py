@@ -169,8 +169,10 @@ with tabs[0]:
     if up:
         st.session_state.prest_path = save_file(up.getvalue(), up.name)
         st.session_state.prest_ext = os.path.splitext(st.session_state.prest_path)[1].lower()
-        # NE PAS toucher à rad_* ici.
-        st.session_state.prest_mapped = False  # on revalide seulement ce fichier
+        st.session_state.prest_mapped = False
+    
+        st.session_state.prest_token = st.session_state.get("prest_token", 0) + 1
+
 
     if st.session_state.prest_path:
         # entêtes
